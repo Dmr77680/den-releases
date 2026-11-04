@@ -1,6 +1,9 @@
 name: Download stats
 
 on:
+  push:
+    paths:
+      - '.github/workflows/download-stats.yml'
   schedule:
     - cron: '*/10 * * * *'
   workflow_dispatch:
