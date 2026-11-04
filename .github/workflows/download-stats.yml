@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: download-stats
@@ -18,6 +19,7 @@ concurrency:
 jobs:
   stats:
     runs-on: ubuntu-latest
+    timeout-minutes: 355
     steps:
       - name: Restore previous total
         uses: actions/cache/restore@v4
@@ -27,7 +29,7 @@ jobs:
           restore-keys: |
             stats2-
 
-      - name: Count downloads and notify
+      - name: Watch downloads and notify
         env:
           GH_TOKEN: ${{ github.token }}
           HOOK: ${{ secrets.DISCORD_STATS_WEBHOOK }}
@@ -37,33 +39,47 @@ jobs:
             echo "Secret DISCORD_STATS_WEBHOOK is missing"
             exit 1
           fi
+          interval=${STATS_INTERVAL:-300}
+          max=${STATS_MAX:-20400}
+          start=$(date +%s)
           count_apk() {
             gh api "repos/$1/releases" --paginate \
               --jq '[.[].assets[] | select(.name | endswith(".apk")) | .download_count] | add // 0' \
               | awk '{s+=$1} END{print s+0}'
           }
-          site=$(count_apk Dmr77680/Den2)
-          upd=$(count_apk Dmr77680/den-releases)
-          total=$((site + upd))
-          prev=""
-          if [ -f last_total.txt ]; then
-            prev=$(cat last_total.txt)
-          fi
-          echo "site=$site updates=$upd total=$total previous=${prev:-none}"
-          msg=""
-          if [ -z "$prev" ]; then
-            msg="📊 Suivi des téléchargements de DEN activé. Total actuel : $total (page du projet : $site · mises à jour et lien Discord : $upd)"
-          elif [ "$total" -gt "$prev" ]; then
-            diff=$((total - prev))
-            msg="📥 DEN : +$diff téléchargement(s) — total $total (page du projet : $site · mises à jour et lien Discord : $upd)"
-          fi
-          if [ -n "$msg" ]; then
-            payload=$(jq -n --arg c "$msg" '{content: $c}')
-            curl -fsS -H "Content-Type: application/json" -d "$payload" "$HOOK" > /dev/null
-          fi
-          echo "$total" > last_total.txt
+          while true; do
+            if site=$(count_apk Dmr77680/Den2) && upd=$(count_apk Dmr77680/den-releases); then
+              total=$((site + upd))
+              prev=""
+              if [ -f last_total.txt ]; then
+                prev=$(cat last_total.txt)
+              fi
+              echo "site=$site updates=$upd total=$total previous=${prev:-none}"
+              msg=""
+              if [ -z "$prev" ]; then
+                msg="📊 Suivi des téléchargements de DEN activé. Total actuel : $total (page du projet : $site · mises à jour et lien Discord : $upd)"
+              elif [ "$total" -gt "$prev" ]; then
+                diff=$((total - prev))
+                msg="📥 DEN : +$diff téléchargement(s) — total $total (page du projet : $site · mises à jour et lien Discord : $upd)"
+              fi
+              if [ -n "$msg" ]; then
+                payload=$(jq -n --arg c "$msg" '{content: $c}')
+                curl -fsS -H "Content-Type: application/json" -d "$payload" "$HOOK" > /dev/null || echo "Discord post failed"
+              fi
+              echo "$total" > last_total.txt
+            else
+              echo "GitHub count failed, will retry"
+            fi
+            now=$(date +%s)
+            if [ $((now - start + interval)) -ge "$max" ]; then
+              break
+            fi
+            sleep "$interval"
+          done
+          gh workflow run download-stats.yml --repo "$GITHUB_REPOSITORY" || echo "Relaunch failed, the schedule will take over"
 
       - name: Save total
+        if: always()
         uses: actions/cache/save@v4
         with:
           path: last_total.txt
