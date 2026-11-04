@@ -5,8 +5,8 @@ on:
     paths:
       - '.github/workflows/download-stats.yml'
   schedule:
-- cron: '7,37 * * * *'
-workflow_dispatch:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
