@@ -23,38 +23,39 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: last_total.txt
-          key: stats-never-matches
+          key: stats2-never-matches
           restore-keys: |
-            stats-
+            stats2-
 
       - name: Count downloads and notify
         env:
           GH_TOKEN: ${{ github.token }}
           HOOK: ${{ secrets.DISCORD_STATS_WEBHOOK }}
-          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           if [ -z "${HOOK:-}" ]; then
             echo "Secret DISCORD_STATS_WEBHOOK is missing"
             exit 1
           fi
-          rows=$(gh api "repos/$REPO/releases" --paginate \
-            --jq '.[] | .tag_name as $t | .assets[] | select(.name | endswith(".apk")) | "\($t) \(.download_count)"')
-          total=$(printf '%s\n' "$rows" | awk 'NF{s+=$2} END{print s+0}')
-          latest=$(printf '%s\n' "$rows" | awk 'NF{print; exit}')
-          tag=${latest%% *}
-          count=${latest##* }
+          count_apk() {
+            gh api "repos/$1/releases" --paginate \
+              --jq '[.[].assets[] | select(.name | endswith(".apk")) | .download_count] | add // 0' \
+              | awk '{s+=$1} END{print s+0}'
+          }
+          site=$(count_apk Dmr77680/Den2)
+          upd=$(count_apk Dmr77680/den-releases)
+          total=$((site + upd))
           prev=""
           if [ -f last_total.txt ]; then
             prev=$(cat last_total.txt)
           fi
-          echo "total=$total previous=${prev:-none}"
+          echo "site=$site updates=$upd total=$total previous=${prev:-none}"
           msg=""
           if [ -z "$prev" ]; then
-            msg="📊 Suivi des téléchargements de DEN activé. Total actuel : $total"
+            msg="📊 Suivi des téléchargements de DEN activé. Total actuel : $total (page du projet : $site · mises à jour et lien Discord : $upd)"
           elif [ "$total" -gt "$prev" ]; then
             diff=$((total - prev))
-            msg="📥 DEN : +$diff téléchargement(s) — total $total (dernière version $tag : $count)"
+            msg="📥 DEN : +$diff téléchargement(s) — total $total (page du projet : $site · mises à jour et lien Discord : $upd)"
           fi
           if [ -n "$msg" ]; then
             payload=$(jq -n --arg c "$msg" '{content: $c}')
@@ -66,4 +67,4 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: last_total.txt
-          key: stats-${{ github.run_id }}
+          key: stats2-${{ github.run_id }}
