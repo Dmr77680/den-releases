@@ -9,7 +9,7 @@ Stateless on purpose: "already answered" is read from Discord itself (the bot's 
     LOG_CHANNEL_IDS      required, comma separated channel ids
     LOG_POLL_INTERVAL    seconds between checks (default 120)
     LOG_POLL_MAX         stop after this many seconds (default 20400 = 5h40)
-    LOG_LANGS            "fr,en" (default), "fr" or "en"
+    LOG_LANGS            "en" (default), "fr" or "fr,en"
 """
 import datetime
 import json
@@ -106,7 +106,7 @@ def handle_channel(token, me, channel, langs):
             continue
         att = logs[0]
         if att.get("size", 0) > MAX_BYTES:
-            reply(token, channel, m["id"], "Ce fichier est trop gros (30 Mo max) / File too large (30 MB max).")
+            reply(token, channel, m["id"], "File too large (30 MB max).")
             done += 1
             continue
         with tempfile.TemporaryDirectory() as tmp:
@@ -117,7 +117,7 @@ def handle_channel(token, me, channel, langs):
                 print(f"download failed: {type(e).__name__}", flush=True)
                 continue
             if not ok:
-                reply(token, channel, m["id"], "Je n'ai pas pu lire ce fichier / I could not read this file.")
+                reply(token, channel, m["id"], "I could not read this file.")
                 done += 1
                 continue
             texts = []
@@ -145,7 +145,7 @@ def main():
     channels = [c for c in os.environ.get("LOG_CHANNEL_IDS", "").replace(" ", "").split(",") if c]
     if not token or not channels:
         sys.exit("DISCORD_BOT_TOKEN and LOG_CHANNEL_IDS must be set")
-    langs = [x for x in os.environ.get("LOG_LANGS", "fr,en").replace(" ", "").split(",") if x]
+    langs = [x for x in os.environ.get("LOG_LANGS", "en").replace(" ", "").split(",") if x]
     interval = float(os.environ.get("LOG_POLL_INTERVAL", "120"))
     limit = float(os.environ.get("LOG_POLL_MAX", "20400"))
     start = time.time()
